@@ -462,6 +462,9 @@ class CountryConverter:
 
         self.data.reset_index(drop=True, inplace=True)
         self.regexes = [re.compile(entry, re.IGNORECASE) for entry in self.data.regex]
+        self.iso2_regexes = [
+            re.compile(entry, re.IGNORECASE) for entry in self.data.ISO2
+        ]
 
         # the following section adds shortcuts to all classifications to the
         # class.
@@ -561,9 +564,15 @@ class CountryConverter:
             else:
                 src_format = self._validate_input_para(src, self.data.columns.tolist())
 
-            if src_format.lower() == "regex":
+            # if src_format.lower() == "regex":
+            if src_format.lower() in ["regex", "iso2"]:
                 result_list = []
-                for ind_regex, ccregex in enumerate(self.regexes):
+                # for ind_regex, ccregex in enumerate(self.regexes):
+                if src_format.lower() == "iso2":
+                    regexes = self.iso2_regexes
+                elif src_format.lower() == "regex":
+                    regexes = self.regexes
+                for ind_regex, ccregex in enumerate(regexes):
                     if ccregex.search(spec_name):
                         result_list.append(self.data.loc[ind_regex, to].values[0])
                     if len(result_list) > 1:
@@ -583,7 +592,9 @@ class CountryConverter:
                     etr[0]
                     for etr in self.data[
                         _match_col.str.contains(
-                            "^" + spec_name + "$", flags=re.IGNORECASE, na=False
+                            "^" + re.escape(spec_name) + "$",
+                            flags=re.IGNORECASE,
+                            na=False,
                         )
                     ][to].values
                 ]
@@ -611,12 +622,12 @@ class CountryConverter:
 
     @property
     def valid_class(self):
-        """ Valid strings for the converter """
+        """Valid strings for the converter"""
         return list(self.data.columns)
 
     @property
     def valid_country_classifications(self):
-        """ All classifications available for countries without any aggregation"""
+        """All classifications available for countries without any aggregation"""
         return [
             cname
             for cname in self.data.columns
@@ -855,7 +866,7 @@ def _parse_arg(valid_classifications):
 
 def cli_output(conv_names, sep):
     """Helper function for printing to the console"""
-    pd.set_option("max_rows", len(str(conv_names)))
+    pd.options.display.max_rows = len(str(conv_names))
     if type(conv_names) is pd.DataFrame:
         if len(conv_names.columns) == 1:
             conv_names = conv_names.iloc[:, 0].tolist()
