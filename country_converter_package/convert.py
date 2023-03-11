@@ -1,5 +1,5 @@
 import warnings
-from typing import Collection, Iterable, List, Sequence, Union
+from typing import Any, Collection, Iterable, List, Sequence, Union
 import re
 
 from country_converter_package.classification_data import ClassificationData
@@ -31,12 +31,24 @@ class CountryConverter:
     """
 
     matcher: ClassificationCorrespondence
+    additional_data: Union[list, Any]
+    only_UNmember: bool
+    include_obsolete: bool
 
-    def __init__(self, matcher: Union[ClassificationCorrespondence, None] = None):
+    def __init__(
+        self,
+        matcher: Union[ClassificationCorrespondence, None] = None,
+        additional_data: Union[list, Any] = None,
+        only_UNmember: bool = False,
+        include_obsolete: bool = False,
+    ):
         if matcher is None:
             matcher = ClassificationCorrespondence(DATA, "iso3")
 
         self.matcher = matcher
+        self.additional_data = additional_data
+        self.only_UNmember = only_UNmember
+        self.include_obsolete = include_obsolete
 
     @staticmethod
     def _validate_names_type(
@@ -220,6 +232,24 @@ class CountryConverter:
             | additional_mapping
         )
 
+        # if only UNmembers are requested, filter out the rest
+        if self.only_UNmember:
+            un_correspondence = self.matcher.correspondence_dictionary(
+                keys=names,
+                source=from_class,
+                target="unmember",
+                default="",
+                exclude_prefix=exclude_prefix,
+            )
+            # filter out all entries do not have a membership year
+            un_correspondence = {
+                k: v for k, v in un_correspondence.items() if isinstance(v, int)
+            }
+            # filter out all the entries that are not UNmembers
+            correspondence = {
+                k: v for k, v in correspondence.items() if k in un_correspondence
+            }
+
         # check pandas dependency
         optional_pd = _check_pandas()
 
@@ -238,6 +268,6 @@ class CountryConverter:
 
 
 if __name__ == "__main__":
-    cc = CountryConverter()
+    cc = CountryConverter(only_UNmember=True)
 
-    result = cc.convert("GTM", src="iso3", to="ISO2")
+    result = cc.convert(["GTM", "montserrat"], src="iso3", to="ISO2")

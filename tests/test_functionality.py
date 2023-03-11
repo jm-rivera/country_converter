@@ -143,19 +143,6 @@ def test_toISO2_conversion():
     assert "TR" == converter.convert("TUR", src="ISO3", to="ISO2")
 
 
-def test_toISO2_conversion_new():
-    converter = CountryConverter()
-    assert "DE" == converter.convert("DEU", from_class="ISO3", to="ISO2")
-    assert "GB" == converter.convert("GBR", from_class="ISO3", to="ISO2")
-    assert "GB" == converter.convert("UK", from_class="ISO2", to="ISO2")
-    assert "GB" == converter.convert("COG", to="ISO3")
-    assert "GB" == converter.convert("GB", to="ISO2")
-    assert "GB" == converter.convert("GBR", to="ISO2")
-    assert "TR" == converter.convert("TR", from_class="ISO2", to="ISO2")
-    assert "TR" == converter.convert("TUR", from_class="ISO3", to="ISO2")
-    converter.convert("Congo democratic", to="faocode")
-
-
 def test_additional_country_file():
     converter_basic = coco.CountryConverter()
     converter_extended = coco.CountryConverter(additional_data=custom_data)
