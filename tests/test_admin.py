@@ -8,7 +8,7 @@ import warnings
 
 import pytest
 
-import country_converter as coco  # noqa
+import country_converter_package as coco  # noqa
 
 TESTPATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(TESTPATH, ".."))

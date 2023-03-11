@@ -1,4 +1,4 @@
-from country_converter.country_converter import *
+from country_converter_package.country_converter import *
 
 from .version import __version__
 

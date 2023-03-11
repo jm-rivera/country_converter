@@ -4,14 +4,13 @@
 import argparse
 import logging
 import os
-import pprint
 import re
 import sys
 from collections import OrderedDict
 
 import pandas as pd
 
-from country_converter.version import __version__
+from country_converter_package.version import __version__
 
 COUNTRY_DATA_FILE = os.path.join(
     os.path.split(os.path.abspath(__file__))[0], "country_data.tsv"

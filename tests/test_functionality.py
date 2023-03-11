@@ -13,8 +13,10 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_series_equal
 
-import country_converter as coco  # noqa
-from country_converter.country_converter import _parse_arg  # noqa
+import country_converter_package as coco  # noqa
+from country_converter_package.country_converter import _parse_arg  # noqa
+
+from country_converter_package.convert import CountryConverter
 
 TESTPATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(TESTPATH, ".."))
@@ -139,6 +141,19 @@ def test_toISO2_conversion():
     assert "GB" == converter.convert("GBR", to="ISO2")
     assert "TR" == converter.convert("TR", src="ISO2", to="ISO2")
     assert "TR" == converter.convert("TUR", src="ISO3", to="ISO2")
+
+
+def test_toISO2_conversion_new():
+    converter = CountryConverter()
+    assert "DE" == converter.convert("DEU", from_class="ISO3", to="ISO2")
+    assert "GB" == converter.convert("GBR", from_class="ISO3", to="ISO2")
+    assert "GB" == converter.convert("UK", from_class="ISO2", to="ISO2")
+    assert "GB" == converter.convert("COG", to="ISO3")
+    assert "GB" == converter.convert("GB", to="ISO2")
+    assert "GB" == converter.convert("GBR", to="ISO2")
+    assert "TR" == converter.convert("TR", from_class="ISO2", to="ISO2")
+    assert "TR" == converter.convert("TUR", from_class="ISO3", to="ISO2")
+    converter.convert("Congo democratic", to="faocode")
 
 
 def test_additional_country_file():
