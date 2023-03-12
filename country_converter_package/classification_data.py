@@ -1,6 +1,85 @@
+import logging
 import re
 from dataclasses import dataclass, field
-from typing import Union
+from typing import Optional, Union
+import json
+
+from country_converter_package import _check_pandas, FILE
+
+log = logging.getLogger(__name__)
+
+UNIQUE = ["name_short", "name_official", "regex"]
+STRING = UNIQUE + [
+    "ISO2",
+    "ISO3",
+    "continent",
+    "UNregion",
+    "EXIO1",
+    "EXIO2",
+    "EXIO3",
+    "WIOD",
+]
+
+
+optional_pd = _check_pandas()
+
+
+def _check_unique_names_df(df):
+    """Checks if the names in the input dataframe are unique."""
+    for name_entry in UNIQUE:
+        if df[name_entry].duplicated().any():
+            log.warning(f"Duplicated values in column {name_entry}")
+
+
+def _pandas_loader(data: Union[optional_pd.DataFrame, str]):
+    """Loads the classification data from a CSV file using pandas."""
+
+    if isinstance(data, optional_pd.DataFrame):
+        _check_unique_names_df(data)
+        return data
+
+    else:
+        loaded_data = optional_pd.read_csv(
+            data,
+            sep="\t",
+            encoding="utf-8",
+            converters={str_col: str for str_col in STRING},
+        )
+        _check_unique_names_df(loaded_data)
+        return loaded_data
+
+
+def _df_to_dict(df: optional_pd.DataFrame, index: str) -> dict:
+    """Converts a dataframe to a dictionary."""
+    columns = [c for c in df.columns if c != index]
+
+    return df.set_index(index)[columns].to_dict("index")
+
+
+def _read_additional_data(
+    data: Union[optional_pd.DataFrame, str, list]
+) -> optional_pd.DataFrame:
+    """Reads additional data from provided file(s)"""
+    if optional_pd.DataFrame is None:
+        raise ImportError(
+            "Pandas is required to load the classification data from a CSV file."
+        )
+
+    if isinstance(data, str):
+        data = [data]
+
+    files = []
+
+    for file in data:
+        files.append(_pandas_loader(file))
+
+    # Concatenate all the dataframes into a single dataframe.
+    files = optional_pd.concat(files, ignore_index=True)
+
+    # Convert the dataframe to a dictionary.
+    files = _df_to_dict(files, "regex")
+
+    return files
 
 
 def _check_int(value: Union[int, str, float]) -> Union[int, str, float]:
@@ -182,7 +261,7 @@ def _get_unique_keys(dictionary: dict) -> set:
         return set().union(*keys)
 
 
-def _change_top_key_value(new_key: str, d: dict) -> dict:
+def _change_top_key_value(new_key: str, d: dict, to_lower: bool = True) -> dict:
 
     """Creates a new dictionary with the top-level key changed to a new value.
 
@@ -202,7 +281,8 @@ def _change_top_key_value(new_key: str, d: dict) -> dict:
 
     """
     # convert to lower
-    d = _to_lower(d)
+    if to_lower:
+        d = _to_lower(d)
 
     # Create a new dictionary to store the converted data.
     new_dict = {}
@@ -230,7 +310,9 @@ def _change_top_key_value(new_key: str, d: dict) -> dict:
     return new_dict
 
 
-def _read_classification_json(index: str) -> dict:
+def _read_classification_json(
+    index: str, lower: bool = True, data: Union[Optional[optional_pd.DataFrame]] = None
+) -> dict:
     """Reads a classification JSON file and returns the data as a dictionary.
 
     This function reads the "country_data.json" file and returns its contents as a dictionary.
@@ -242,25 +324,26 @@ def _read_classification_json(index: str) -> dict:
     Args:
         index (str): The value to be used as the new top-level key in the dictionary. If "regex",
             the keys will be compiled as regular expressions.
+        lower (bool): If True, all string values in the dictionary will be converted to lowercase.
+        data (optional): A pandas DataFrame containing additional data not contained
+            in the "country_data.json" file.
 
     Returns:
-        dict: A dictionary containing the contents of the "country_data.json" file.
+        dict: A dictionary containing with the classification data.
     """
-    import json
 
     # Read the JSON file.
-    with open(
-        "/Users/jorge/Documents/GitHub/country_converter/country_converter_package/country_data.json",
-        "r",
-    ) as f:
-        data = json.load(f)
+    if data is None:
+        with open(FILE, "r") as f:
+            data = json.load(f)
 
     # Change the top-level key to the value specified by the `index` argument.
     if index != "regex":
         # Change the top-level key to the value specified by the `index` argument.
-        data = _change_top_key_value(index, data)
+        data = _change_top_key_value(index, data, to_lower=lower)
         # Convert any strings to lowercase
-        data = _to_lower(data)
+        if lower:
+            data = _to_lower(data)
         # Convert any integers(-like) to integers
         data = _convert_int(data)
 
@@ -272,7 +355,8 @@ def _read_classification_json(index: str) -> dict:
         return _keys_to_int(data)
 
     # If the index is "regex". First convert to lower.
-    data = _to_lower(data)
+    if lower:
+        data = _to_lower(data)
 
     # Second convert any integers(-like) to integers.
     data = _convert_int(data)
@@ -296,11 +380,26 @@ class ClassificationData:
 
     source_classification: str = "regex"
     data: dict = field(default_factory=dict)
+    lower: bool = True
+    additional_data: Union[optional_pd.DataFrame, None] = None
 
     def __post_init__(self) -> None:
         """Read the classification data from the JSON file"""
+
         if len(self.data) < 1:
-            self.data = _read_classification_json(index=self.source_classification)
+            self.data = _read_classification_json(
+                index=self.source_classification, lower=self.lower
+            )
+
+        if self.additional_data is not None and isinstance(
+            self.additional_data, (optional_pd.DataFrame, str, list[str])
+        ):
+            self.additional_data = _read_additional_data(self.additional_data)
+            self.data = self.data | _read_classification_json(
+                data=self.additional_data,
+                index=self.source_classification,
+                lower=self.lower,
+            )
 
     def __repr__(self) -> str:
         """Return the string representation of the object"""
@@ -327,4 +426,9 @@ class ClassificationData:
         # Set the new source.
         self.source_classification = source
         # Read the new classification data.
-        self.data = _read_classification_json(index=source)
+        self.data = _read_classification_json(index=source, lower=self.lower)
+
+        if self.additional_data is not None:
+            self.data = self.data | _read_classification_json(
+                data=self.additional_data, index=source, lower=self.lower
+            )

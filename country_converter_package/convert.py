@@ -4,17 +4,31 @@ import re
 
 from country_converter_package.classification_data import ClassificationData
 from country_converter_package.correspondence import ClassificationCorrespondence
+from country_converter_package import _check_pandas
 
 DATA: ClassificationData = ClassificationData()
 
 
-def _check_pandas():
-    try:
-        import pandas as optional_pd
+def _convert_dict2df(optional_pd, classification: str, dictionary: dict):
+    """Convert a dictionary to a pandas DataFrame.
 
-        return optional_pd
-    except ImportError:
-        return None
+    Args:
+        optional_pd: The pandas module.
+        classification: The name of the classification.
+        dictionary: The dictionary to convert.
+
+    Returns:
+        A pandas DataFrame.
+
+    """
+
+    return (
+        optional_pd.DataFrame.from_dict(
+            dictionary, orient="index", columns=[classification]
+        )
+        .rename_axis("name_short" if classification != "name_short" else "name")
+        .reset_index()
+    )
 
 
 class CountryConverter:
@@ -33,14 +47,12 @@ class CountryConverter:
     matcher: ClassificationCorrespondence
     additional_data: Union[list, Any]
     only_UNmember: bool
-    include_obsolete: bool
 
     def __init__(
         self,
         matcher: Union[ClassificationCorrespondence, None] = None,
         additional_data: Union[list, Any] = None,
         only_UNmember: bool = False,
-        include_obsolete: bool = False,
     ):
         if matcher is None:
             matcher = ClassificationCorrespondence(DATA, "iso3")
@@ -48,7 +60,41 @@ class CountryConverter:
         self.matcher = matcher
         self.additional_data = additional_data
         self.only_UNmember = only_UNmember
-        self.include_obsolete = include_obsolete
+
+        self.__post_init__()
+
+    def __post_init__(self):
+        """Perform post-initialization tasks."""
+
+        # Get the classification data with "name_short" as the key.
+        data = ClassificationData("name_short", lower=False)
+
+        # Get the valid classifications.
+        classifications = data.get_valid_classifications()
+
+        # Set the valid classifications as attribute.
+        self.__setattr__("valid_country_classifications", list(classifications))
+
+        # check if pandas is installed. If it is, dataframes will be set as attributes.
+        # If not, dictionaries will be set as attributes.
+        optional_pd = _check_pandas()
+
+        # Set the classification data as attributes.
+        for classification in classifications:
+            # Get the data for the current classification. Filter the dictionary
+            # to remove empty values.
+            _ = {
+                k: v[classification]
+                for k, v in data.data.items()
+                if v[classification] != ""
+            }
+
+            # If pandas is installed, convert the dictionary to a DataFrame.
+            if optional_pd is not None:
+                _ = _convert_dict2df(optional_pd, classification, _)
+
+            # Set the attribute.
+            self.__setattr__(classification, _)
 
     @staticmethod
     def _validate_names_type(
@@ -268,6 +314,6 @@ class CountryConverter:
 
 
 if __name__ == "__main__":
-    cc = CountryConverter(only_UNmember=True)
+    cc = CountryConverter()
 
     result = cc.convert(["GTM", "montserrat"], src="iso3", to="ISO2")
