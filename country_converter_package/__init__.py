@@ -12,8 +12,12 @@ def _check_pandas():
     try:
         import pandas as optional_pd
 
+        try:
+            optional_pd.__version__
+        except AttributeError:
+            return PandasNotInstalled()
         return optional_pd
-    except ImportError:
+    except ModuleNotFoundError:
         return PandasNotInstalled()
 
 

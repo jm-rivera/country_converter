@@ -87,26 +87,55 @@ class ClassificationCorrespondence:
                 )
                 return default
             # Keep the first match
-            key = matching[0]
+            key = matching  # [0]
 
-        # If the key is not in the data, return None
+        # Create 'key' lower (if key is str), which is a lowercase version of the key
         if isinstance(key, str):
             key_lower = key.lower()
         else:
             key_lower = key
-        if key_lower not in self.classification_data.data:
-            log.warning(
-                f"'{key}' not found in "
-                f"{self.classification_data.source_classification}"
-            )
-            return default
+
+        # Verify that the key is in the classification data
+        # First if not list, make list
+        if not isinstance(key_lower, list):
+            key_lower = [key_lower]
+
+        # Temporary list to store unmatched keys (if any)
+        key_lower_ = []
+
+        # Check if each key exists, if not use default value
+        for k in key_lower:
+            if k not in self.classification_data.data:
+                log.warning(
+                    f"'{key}' not found in "
+                    f"{self.classification_data.source_classification}"
+                )
+                key_lower_.append(default)
+            else:
+                key_lower_.append(k)
+
+        # If there are unmatched keys, return
+        if key_lower != key_lower_:
+            return key_lower_
+
+        # list to store the results
+        result = []
 
         # Match the key to the value in the target classification
         if target == "iso2":
-            clean_result = self.classification_data.data[key_lower][target]
-            return re.sub("[^a-zA-Z]+", "", clean_result.split("|")[0])
+            clean_result = []
+            for key_ in key_lower:
+                clean_result.append(self.classification_data.data[key_][target])
+            result = [re.sub("[^a-zA-Z]+", "", c.split("|")[0]) for c in clean_result]
 
-        return self.classification_data.data[key_lower][target]
+        else:
+            for key_ in key_lower:
+                result.append(self.classification_data.data[key_][target])
+
+        if len(result) == 1:
+            return result[0]
+        else:
+            return result
 
     @staticmethod
     def _separate_exclude_cases(name, exclude_prefix):

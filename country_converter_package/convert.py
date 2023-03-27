@@ -1,4 +1,5 @@
 import warnings
+from functools import partial
 from typing import Any, Collection, Iterable, List, Sequence, Union
 import re
 
@@ -29,6 +30,21 @@ def _convert_dict2df(optional_pd, classification: str, dictionary: dict):
         .rename_axis("name_short" if classification != "name_short" else "name")
         .reset_index()
     )
+
+
+def _classifications_as_df(optional_pd, dictionary: dict):
+    """Convert a dictionary to a pandas DataFrame.
+
+    Args:
+        optional_pd: The pandas module.
+        dictionary: The dictionary to convert.
+
+    Returns:
+        A pandas DataFrame.
+
+    """
+
+    return optional_pd.DataFrame.from_dict(dictionary).T.reset_index(drop=True)
 
 
 class CountryConverter:
@@ -72,12 +88,18 @@ class CountryConverter:
         # Get the valid classifications.
         classifications = data.get_valid_classifications()
 
-        # Set the valid classifications as attribute.
-        self.__setattr__("valid_country_classifications", list(classifications))
-
         # check if pandas is installed. If it is, dataframes will be set as attributes.
         # If not, dictionaries will be set as attributes.
         optional_pd = _check_pandas()
+
+        # Set the valid classifications as attribute.
+        self.__setattr__("valid_country_classifications", list(classifications))
+        # Set the data as an attribute.
+        if optional_pd.DataFrame is not None:
+            self.__setattr__(
+                "data",
+                _classifications_as_df(optional_pd=optional_pd, dictionary=data.data),
+            )
 
         # Set the classification data as attributes.
         for classification in classifications:
@@ -90,11 +112,62 @@ class CountryConverter:
             }
 
             # If pandas is installed, convert the dictionary to a DataFrame.
-            if optional_pd is not None:
+            if optional_pd.DataFrame is not None:
                 _ = _convert_dict2df(optional_pd, classification, _)
 
             # Set the attribute.
             self.__setattr__(classification, _)
+
+            # Set the attribute 'as' functionality
+            self.__setattr__(
+                classification + "as",
+                partial(self._get_class_as, from_class=classification),
+            )
+
+    # get classification
+    def _get_class_as(self, to_classification: str, from_class: str):
+        """Get the classification data as another classification.
+
+        Args:
+            to_classification: The classification to convert to.
+            from_class: The classification to convert from.
+
+        Returns:
+            A dictionary or a pandas DataFrame.
+
+        """
+
+        # Get the "from" classification data.
+        original_ = self.__getattribute__(from_class)
+
+        # Get the "to" classification data.
+        result_ = self.__getattribute__(to_classification)
+
+        # if the "to" classification data is a dictionary, filter it.
+        if isinstance(result_, dict):
+            result_ = {k: v for k, v in result_.items() if k in original_}
+
+            # If the "to" classification is ISO2, remove the non-alphabetic characters.
+            if to_classification in ["ISO2"]:
+                for k, v in result_.items():
+                    result_[k] = re.sub("[^a-zA-Z]+", "", v.split("|")[0])
+
+            # Return the filtered dictionary.
+            return result_
+
+        # If the "to" classification data is a DataFrame, filter it.
+        else:
+            result_ = result_.loc[
+                lambda d: d.name_short.isin(original_.name_short)
+            ].copy()
+
+            # If the "to" classification is ISO2, remove the non-alphabetic characters.
+            if to_classification in ["ISO2"]:
+                result_["ISO2"] = result_["ISO2"].apply(
+                    lambda x: re.sub("[^a-zA-Z]+", "", x.split("|")[0])
+                )
+                # Return the filtered DataFrame.
+                return result_.reset_index(drop=True)
 
     @staticmethod
     def _validate_names_type(
@@ -210,7 +283,7 @@ class CountryConverter:
         self,
         names: Union[List, Collection, Sequence, str, int],
         from_class: Union[None, str] = None,
-        to: str = "iso3",
+        to: str = "ISO3",
         enforce_list: bool = False,
         not_found: Union[str, None] = None,
         exclude_prefix: Union[None, list] = None,
@@ -300,7 +373,9 @@ class CountryConverter:
         optional_pd = _check_pandas()
 
         # If pandas is installed, use pandas.Series.map if the input is a pandas.Series.
-        if optional_pd is not None and isinstance(names, optional_pd.Series):
+        if (optional_pd.DataFrame is not None) and isinstance(
+            names, (optional_pd.Series, optional_pd.Index)
+        ):
             converted_names = names.map(correspondence)
         # If pandas is not installed, use map and return a list.
         else:
@@ -316,4 +391,4 @@ class CountryConverter:
 if __name__ == "__main__":
     cc = CountryConverter()
 
-    result = cc.convert(["GTM", "montserrat"], src="iso3", to="ISO2")
+    result = cc.convert(["Guatemala or Mexico", "montserrat"], to="DAC")

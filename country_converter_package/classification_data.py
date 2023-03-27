@@ -382,6 +382,7 @@ class ClassificationData:
     data: dict = field(default_factory=dict)
     lower: bool = True
     additional_data: Union[optional_pd.DataFrame, None] = None
+    data_df: [optional_pd.DataFrame, None] = None
 
     def __post_init__(self) -> None:
         """Read the classification data from the JSON file"""
